@@ -1,25 +1,26 @@
-use std::io::Write;
+use std::io::{Read, Write};
 mod onnx_structs;
 use crate::onnx_structs::tensor_shape_proto::Dimension;
 use crate::onnx_structs::type_proto::{Tensor, Value};
 use onnx_structs::*;
 use prost::Message;
+mod ops;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConcreteF32Tensor {
     pub name: String,
     pub data: Vec<f32>,
     pub shape: Vec<i64>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ConcreteI32Tensor {
     pub name: String,
     pub data: Vec<i32>,
     pub shape: Vec<i64>,
 }
 
-#[derive(Debug, Clone)]
 pub struct PlaceholderF32Tensor {
     pub name: String,
     pub shape: Vec<i64>,
@@ -93,16 +94,19 @@ impl From<ConcreteI32Tensor> for TensorProto {
     }
 }
 
+fn i64_to_dim_vec(input: Vec<i64>) -> Vec<Dimension> {
+    input
+        .iter()
+        .map(|dim| Dimension {
+            denotation: "".to_string(),
+            value: Some(tensor_shape_proto::dimension::Value::DimValue(*dim)),
+        })
+        .collect()
+}
+
 impl From<ConcreteF32Tensor> for ValueInfoProto {
     fn from(ten: ConcreteF32Tensor) -> Self {
-        let dims: Vec<Dimension> = ten
-            .shape
-            .iter()
-            .map(|dim| Dimension {
-                denotation: "".to_string(),
-                value: Some(tensor_shape_proto::dimension::Value::DimValue(*dim)),
-            })
-            .collect();
+        let dims: Vec<Dimension> = i64_to_dim_vec(ten.shape);
         ValueInfoProto {
             name: ten.name,
             r#type: Some(onnx_structs::TypeProto {
@@ -179,6 +183,25 @@ impl From<ValueInfoProto> for PlaceholderF32Tensor {
     }
 }
 
+impl From<&PlaceholderF32Tensor> for ValueInfoProto {
+    fn from(val: &PlaceholderF32Tensor) -> Self {
+        let dims: Vec<Dimension> = i64_to_dim_vec(val.shape.clone());
+        ValueInfoProto {
+            name: val.name.clone(),
+            r#type: Some(onnx_structs::TypeProto {
+                denotation: "".to_string(),
+                value: Some(onnx_structs::type_proto::Value::TensorType(
+                    onnx_structs::type_proto::Tensor {
+                        elem_type: 1, // i32
+                        shape: Some(TensorShapeProto { dim: dims }),
+                    },
+                )),
+            }),
+            doc_string: "".to_string(),
+        }
+    }
+}
+
 impl From<ValueInfoProto> for PlaceholderI32Tensor {
     fn from(val: ValueInfoProto) -> Self {
         let a = val.r#type.unwrap().value.unwrap();
@@ -213,8 +236,14 @@ impl From<ValueInfoProto> for PlaceholderI32Tensor {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ExternalInputs {
+    external_f32_inputs: Vec<ConcreteF32Tensor>,
+    external_i32_inputs: Vec<ConcreteI32Tensor>,
+}
 pub struct ModelBuilder {
     model: onnx_structs::ModelProto,
+    external_inputs: ExternalInputs,
 }
 
 impl From<i64> for tensor_shape_proto::Dimension {
@@ -304,15 +333,19 @@ impl ModelBuilder {
                 metadata_props: vec![],
                 training_info: vec![],
             },
+            external_inputs: ExternalInputs {
+                external_f32_inputs: vec![],
+                external_i32_inputs: vec![],
+            },
         }
     }
 
-    fn add_initializer(&mut self, value: TensorProto) {
-        self.model.graph.as_mut().unwrap().initializer.push(value);
-    }
+    // fn add_initializer(&mut self, value: TensorProto) {
+    //     self.model.graph.as_mut().unwrap().initializer.push(value);
+    // }
 
     pub fn add_input(&mut self, input: ConcreteF32Tensor) -> PlaceholderF32Tensor {
-        self.add_initializer(TensorProto::from(input.clone()));
+        self.external_inputs.external_f32_inputs.push(input.clone());
         let place_holder = onnx_structs::ValueInfoProto::from(input);
         self.model
             .graph
@@ -323,8 +356,22 @@ impl ModelBuilder {
         PlaceholderF32Tensor::from(place_holder)
     }
 
+    pub fn get_val_of(&mut self, placeholder: &PlaceholderF32Tensor) -> ConcreteF32Tensor {
+        let output = ValueInfoProto::from(placeholder.clone());
+        self.model.graph.as_mut().unwrap().output.push(output);
+        self.serialize_to_file();
+        std::process::Command::new("./eval_model.sh")
+            .spawn()
+            .expect("Error running model")
+            .wait()
+            .unwrap();
+        let file = std::fs::File::open("my_model_output.json").unwrap();
+        let output: ConcreteF32Tensor = serde_json::from_reader(file).unwrap();
+        output
+    }
+
     pub fn add_i32_input(&mut self, input: ConcreteI32Tensor) -> PlaceholderI32Tensor {
-        self.add_initializer(TensorProto::from(input.clone()));
+        self.external_inputs.external_i32_inputs.push(input.clone());
         let place_holder = onnx_structs::ValueInfoProto::from(input);
         self.model
             .graph
@@ -360,6 +407,9 @@ impl ModelBuilder {
         buf.reserve(self.model.encoded_len());
         self.model.encode(&mut buf).unwrap();
         let mut out_file = std::fs::File::create("my_model.onnx").unwrap();
+        let inputs = serde_json::to_string_pretty(&self.external_inputs).unwrap();
+        let mut inputs_file = std::fs::File::create("my_model_inputs.json").unwrap();
+        inputs_file.write_all(inputs.as_bytes()).unwrap();
         out_file.write_all(&buf).unwrap();
     }
 }
@@ -367,39 +417,6 @@ impl ModelBuilder {
 pub struct OperationSingleOutput {
     operation: NodeProto,
     output_description: ValueInfoProto,
-}
-
-pub fn create_add_op<T: TensorDescriptor>(
-    left: T,
-    right: T,
-    output: &str,
-) -> OperationSingleOutput {
-    // let dims: Vec<Dimension> = left.shape().iter().map(|&e| e.into()).collect();
-    // let output = ValueInfoProto {
-    //     name: output.to_string(),
-    //     r#type: Some(TypeProto {
-    //         denotation: "".to_string(),
-    //         value: Some(Value::TensorType(Tensor {
-    //             elem_type: 1,
-    //             shape: Some(TensorShapeProto { dim: dims }),
-    //         })),
-    //     }),
-    //     doc_string: "".to_string(),
-    // };
-    // let operation = NodeProto {
-    //     input: vec![left.name(), right.name()],
-    //     output: vec![output.name()],
-    //     name: "".to_string(),
-    //     op_type: "Add".to_string(),
-    //     domain: "".to_string(),
-    //     attribute: vec![],
-    //     doc_string: "".to_string(),
-    // };
-    // OperationSingleOutput {
-    //     operation,
-    //     output_description: output,
-    // }
-    unimplemented!()
 }
 
 pub fn create_cross_entropy_op<T: TensorDescriptor>(
