@@ -1,0 +1,96 @@
+ir_version: 7
+producer_name: "backend-test"
+graph {
+  node {
+    input: "a"
+    input: "b"
+    output: "c"
+    name: "my_add"
+    op_type: "Add"
+  }
+  node {
+    input: "c"
+    input: "a"
+    output: "d"
+    name: "my_mul"
+    op_type: "Mul"
+  }
+  node {
+    input: "a"
+    input: "b"
+    output: "dd_da"
+    output: "dd_db"
+    name: "my_gradient"
+    op_type: "Gradient"
+    attribute {
+      name: "xs"
+      strings: "a"
+      strings: "b"
+      type: STRINGS
+    }
+    attribute {
+      name: "y"
+      s: "d"
+      type: STRING
+    }
+    domain: "ai.onnx.preview.training"
+  }
+  name: "GradientOfTwoOperators"
+  input {
+    name: "a"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+        }
+      }
+    }
+  }
+  input {
+    name: "b"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+        }
+      }
+    }
+  }
+  output {
+    name: "d"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+        }
+      }
+    }
+  }
+  output {
+    name: "dd_da"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+        }
+      }
+    }
+  }
+  output {
+    name: "dd_db"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+        }
+      }
+    }
+  }
+}
+opset_import {
+  version: 12
+}
+opset_import {
+  domain: "ai.onnx.preview.training"
+  version: 1
+}

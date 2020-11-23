@@ -8,6 +8,17 @@ graph {
     output: "out"
     op_type: "Add"
   }
+  node {
+    input: "out"
+    input: "left"
+    output: "new_out"
+    op_type: "SoftmaxCrossEntropyLoss"
+    attribute {
+      name: "reduction"
+      s: "mean"
+      type: STRING
+    }
+  }
   name: "rust-graph"
   initializer {
     dims: 2
@@ -62,16 +73,13 @@ graph {
     }
   }
   output {
-    name: "out"
+    name: "new_out"
     type {
       tensor_type {
         elem_type: 1
         shape {
           dim {
-            dim_value: 2
-          }
-          dim {
-            dim_value: 2
+            dim_value: 1
           }
         }
       }
@@ -93,7 +101,24 @@ graph {
       }
     }
   }
+  value_info {
+    name: "new_out"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+          dim {
+            dim_value: 1
+          }
+        }
+      }
+    }
+  }
 }
 opset_import {
-  version: 13
+  version: 12
+}
+opset_import {
+  domain: "ai.onnx.preview.training"
+  version: 1
 }
