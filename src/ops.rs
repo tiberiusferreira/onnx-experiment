@@ -1,4 +1,4 @@
-use crate::onnx_structs::NodeProto;
+use crate::onnx_proto_structs::NodeProto;
 use crate::{ModelBuilder, PlaceholderF32Tensor};
 
 impl ModelBuilder {
