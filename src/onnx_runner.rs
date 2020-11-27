@@ -1,59 +1,64 @@
 use crate::onnx_proto_structs::ModelProto;
-use crate::{onnx_proto_structs, ConcreteF32Tensor, ConcreteTensor, ExternalInputs};
+use crate::{onnx_proto_structs, TensorCollection};
 use prost::Message;
 use std::io::Write;
 
-struct PythonOnnxRunner {
+pub struct PythonOnnxRunner {
     model: onnx_proto_structs::ModelProto,
-    external_inputs: ExternalInputs,
+    model_inputs: TensorCollection,
 }
 
 pub trait OnnxRunner {
     fn eval(
-        &mut self,
         model: &onnx_proto_structs::ModelProto,
-        external_inputs: &ExternalInputs,
-    ) -> Vec<ConcreteTensor>;
+        external_inputs: &TensorCollection,
+    ) -> TensorCollection;
 }
 
-/*
- {
-        model.serialize_to_file();
-        std::process::Command::new("./eval_model.sh")
-            .spawn()
-            .expect("Error running model")
-            .wait()
-            .unwrap();
-        let file = std::fs::File::open("my_model_output.json").unwrap();
-        let output: ConcreteF32Tensor = serde_json::from_reader(file).unwrap();
-        output
-    }
-*/
-
 impl OnnxRunner for PythonOnnxRunner {
-    fn eval(
-        &mut self,
-        model: &ModelProto,
-        external_inputs: &ExternalInputs,
-    ) -> Vec<ConcreteTensor> {
+    fn eval(model: &ModelProto, external_inputs: &TensorCollection) -> TensorCollection {
         let runner = Self::new(model, external_inputs);
-        runner.serialize_model("my_model.onnx");
-        runner.serialize_inputs("my_model_inputs.json");
-        std::process::Command::new("./onnx_runner/eval_model.sh")
+
+        let model_name = "my_model.onnx";
+        runner.serialize_model(model_name);
+        let mut model_absolute_path = std::env::current_dir().unwrap();
+        model_absolute_path.push(model_name);
+
+        let model_inputs_name = "my_model_inputs.json";
+        runner.serialize_inputs(model_inputs_name);
+        let mut inputs_absolute_path = std::env::current_dir().unwrap();
+        inputs_absolute_path.push(model_inputs_name);
+
+        let output = std::process::Command::new("./onnx_runner/eval_model.sh")
+            .args(&[
+                "--model-file",
+                model_absolute_path.to_str().unwrap(),
+                "--inputs-file",
+                inputs_absolute_path.to_str().unwrap(),
+            ])
+            .stdout(std::process::Stdio::piped())
             .spawn()
             .expect("Error running model")
-            .wait()
-            .unwrap();
-        let file = std::fs::File::open("my_model_output.json").unwrap();
-        let output: ConcreteF32Tensor = serde_json::from_reader(file).unwrap();
-        vec![ConcreteTensor::ConcreteF32Tensor(output)]
+            .wait_with_output()
+            .expect("Error running model");
+        if !output.status.success() {
+            panic!("Error running model");
+        }
+        let output_as_string = String::from_utf8_lossy(&output.stdout);
+        let output: Result<TensorCollection, _> = serde_json::from_str(&output_as_string);
+        match output {
+            Ok(output) => output,
+            Err(_e) => {
+                panic!("Error getting network output: {}", output_as_string);
+            }
+        }
     }
 }
 impl PythonOnnxRunner {
-    pub fn new(model: &onnx_proto_structs::ModelProto, external_inputs: &ExternalInputs) -> Self {
+    pub fn new(model: &onnx_proto_structs::ModelProto, external_inputs: &TensorCollection) -> Self {
         Self {
             model: model.clone(),
-            external_inputs: external_inputs.clone(),
+            model_inputs: external_inputs.clone(),
         }
     }
     fn serialize_model(&self, filename: &str) {
@@ -66,7 +71,7 @@ impl PythonOnnxRunner {
     }
 
     fn serialize_inputs(&self, filename: &str) {
-        let inputs = serde_json::to_string_pretty(&self.external_inputs).unwrap();
+        let inputs = serde_json::to_string_pretty(&self.model_inputs).unwrap();
         let mut inputs_file = std::fs::File::create(filename).unwrap();
         inputs_file.write_all(inputs.as_bytes()).unwrap();
     }

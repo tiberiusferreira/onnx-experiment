@@ -1,25 +1,13 @@
-use onnx_experiment::{ConcreteF32Tensor, ConcreteI32Tensor, ModelBuilder};
+use onnx_experiment::{F32Tensor, I32Tensor, ModelBuilder};
 
 fn main() {
     let mut model = ModelBuilder::new();
-    let a = model.add_input(ConcreteF32Tensor {
-        name: "left".to_string(),
-        data: vec![1., 2., 3., 4.],
-        shape: vec![2, 2],
-    });
-    let b = model.add_input(ConcreteF32Tensor {
-        name: "right".to_string(),
-        data: vec![1., 2., 3., 4.],
-        shape: vec![2, 2],
-    });
-    let _label = model.add_i32_input(ConcreteI32Tensor {
-        name: "labels".to_string(),
-        data: vec![1, 2],
-        shape: vec![2],
-    });
+    let a = model.add_input(F32Tensor::new(vec![1., 2., 3., 4.], vec![2, 2]));
+    let b = model.add_input(F32Tensor::new(vec![1., 2., 3., 4.], vec![2, 2]));
+    let _label = model.add_i32_input(I32Tensor::new(vec![1, 2], vec![2]));
 
     let re = model.add(&a, &b);
-    let w = model.get_val_of(&re);
+    let w = model.get_val_of_f32(&re);
     println!("{:?}", w);
     // let output = model.add_operation(re);
     //
@@ -27,6 +15,4 @@ fn main() {
     // let new_out = model.add_operation(l1_op);
     //
     // model.add_output(new_out.clone());
-
-    model.serialize_to_file();
 }

@@ -1,7 +1,7 @@
 {
-  "external_f32_inputs": [
+  "f32_tensors": [
     {
-      "name": "left",
+      "name": "talM9Lqgow",
       "data": [
         1.0,
         2.0,
@@ -14,7 +14,7 @@
       ]
     },
     {
-      "name": "right",
+      "name": "2IJNZ9qixH",
       "data": [
         1.0,
         2.0,
@@ -27,9 +27,9 @@
       ]
     }
   ],
-  "external_i32_inputs": [
+  "i32_tensors": [
     {
-      "name": "labels",
+      "name": "hwdTf4torZ",
       "data": [
         1,
         2

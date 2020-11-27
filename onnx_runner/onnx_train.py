@@ -61,12 +61,12 @@ with open('my_model_output.json', 'w') as file:
 
 
 # options = {'device': {'id': 'cpu'}}
-# print("Loading Trainer")
-# trainer = ORTTrainer(model, model_desc, optim_config=SGDConfig(), options=ORTTrainerOptions(options))
-# outputs = trainer.train_step(inputs_values)
-# print(outputs)
-# for output in outputs:
-#     print(output)
+print("Loading Trainer")
+trainer = ORTTrainer(model, model_desc, optim_config=SGDConfig(), options=ORTTrainerOptions(options))
+outputs = trainer.train_step(inputs_values)
+print(outputs)
+for output in outputs:
+    print(output)
 
 
 

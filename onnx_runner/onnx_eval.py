@@ -1,7 +1,5 @@
 # source /Users/tiberio/Documents/github/onnxruntime/venv/bin/activate
 import sys
-
-import onnx
 import onnxruntime
 import torch
 import json
@@ -31,13 +29,13 @@ inputs_description = []
 inputs_values = []
 eval_inputs = {}
 
-for single_input in data_inputs['external_f32_inputs']:
+for single_input in data_inputs['f32_tensors']:
     inputs_description.append((single_input['name'], single_input['shape']))
     value = torch.tensor(single_input['data'], dtype=torch.float32).reshape(single_input['shape'])
     eval_inputs[single_input['name']] = value.numpy()
     inputs_values.append(value)
 
-for single_input in data_inputs['external_i32_inputs']:
+for single_input in data_inputs['i32_tensors']:
     inputs_description.append((single_input['name'], single_input['shape']))
     value = torch.tensor(single_input['data'], dtype=torch.int32).reshape(single_input['shape'])
     eval_inputs[single_input['name']] = value.numpy() # single_input['data']
@@ -51,14 +49,21 @@ for out in sess.get_outputs():
 
 output = sess.run(names, input_feed=eval_inputs)
 
-outputs_as_tensors = []
+outputs_as_tensors = {
+    "f32_tensors": [],
+    "i32_tensors": []
+}
+
 for i, out in enumerate(sess.get_outputs()):
-    output_as_tensor = {
-        "name": out.name,
-        "data": output[i].flatten().tolist(),
-        "shape": output[i].shape
-    }
-    outputs_as_tensors.append(output_as_tensor)
+    if out.type == "tensor(float)":
+        output_as_tensor = {
+            "name": out.name,
+            "data": output[i].flatten().tolist(),
+            "shape": output[i].shape
+        }
+        outputs_as_tensors['f32_tensors'].append(output_as_tensor)
+    else:
+        print("Unexpected tensor of type:" + out.type)
 
 if output_file_path:
     with open(output_file_path, 'w') as file:
