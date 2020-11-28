@@ -1,7 +1,7 @@
 {
   "f32_tensors": [
     {
-      "name": "talM9Lqgow",
+      "name": "ux1AiirbdH",
       "data": [
         1.0,
         2.0,
@@ -14,7 +14,7 @@
       ]
     },
     {
-      "name": "2IJNZ9qixH",
+      "name": "BsKWeDhAZb",
       "data": [
         1.0,
         2.0,
@@ -29,10 +29,10 @@
   ],
   "i32_tensors": [
     {
-      "name": "hwdTf4torZ",
+      "name": "u3thh10eCJ",
       "data": [
         1,
-        2
+        1
       ],
       "shape": [
         2

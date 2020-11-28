@@ -7,6 +7,7 @@ mod ops;
 use crate::onnx_runner::OnnxRunner;
 use serde::{Deserialize, Serialize};
 mod onnx_to_internal_types_conversions;
+use crate::ops::OperationSingleOutput;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
@@ -176,6 +177,13 @@ impl ModelBuilder {
         }
     }
 
+    pub fn add_initializer(&mut self, initializer: F32Tensor) -> PlaceholderF32Tensor {
+        let onnx_concrete = TensorProto::from(initializer);
+        let placeholder = PlaceholderF32Tensor::from(&onnx_concrete);
+        self.graph_mut().initializer.push(onnx_concrete);
+        placeholder
+    }
+
     pub fn add_input(&mut self, input: F32Tensor) -> PlaceholderF32Tensor {
         self.model_inputs.f32_tensors.push(input.clone());
         let place_holder = onnx_proto_structs::ValueInfoProto::from(input);
@@ -201,10 +209,25 @@ impl ModelBuilder {
         let output = ValueInfoProto::from(placeholder.clone());
         assert_eq!(self.graph().output.len(), 0);
         self.graph_mut().output.push(output);
-        let mut runner = onnx_runner::PythonOnnxRunner::eval(&self.model, &self.model_inputs);
+        let mut network_outputs =
+            onnx_runner::PythonOnnxRunner::eval(&self.model, &self.model_inputs);
         self.graph_mut().output.clear();
-        assert_eq!(runner.f32_tensors.len(), 1);
-        runner.f32_tensors.pop().unwrap()
+        assert_eq!(network_outputs.f32_tensors.len(), 1);
+        network_outputs.f32_tensors.pop().unwrap()
+    }
+
+    pub fn get_train_loss(&mut self, placeholder: &PlaceholderF32Tensor) -> f32 {
+        let output = ValueInfoProto::from(placeholder.clone());
+        assert_eq!(self.graph().output.len(), 0);
+        assert_eq!(
+            placeholder.shape.len(),
+            0,
+            "Can only get train loss from scalar tensor"
+        );
+        self.graph_mut().output.push(output);
+        let loss = onnx_runner::PythonOnnxRunner::train(&self.model, &self.model_inputs);
+        self.graph_mut().output.clear();
+        loss
     }
 
     pub fn add_i32_input(&mut self, input: I32Tensor) -> PlaceholderI32Tensor {
@@ -214,169 +237,12 @@ impl ModelBuilder {
         PlaceholderI32Tensor::from(&place_holder)
     }
 
-    pub fn add_operation(&mut self, operation: OperationSingleOutput) -> ValueInfoProto {
-        self.graph_mut().node.push(operation.operation);
-        operation.output_description
-    }
+    // pub fn add_operation(&mut self, operation: OperationSingleOutput) -> ValueInfoProto {
+    //     self.graph_mut().node.push(operation.operation);
+    //     operation.output_description
+    // }
 
     pub fn add_output(&mut self, node: ValueInfoProto) {
         self.graph_mut().output.push(node);
-    }
-}
-
-pub struct OperationSingleOutput {
-    operation: NodeProto,
-    output_description: ValueInfoProto,
-}
-
-pub fn create_cross_entropy_op<T: TensorDescriptor>(
-    left: T,
-    right: T,
-    output: &str,
-) -> OperationSingleOutput {
-    let output = ValueInfoProto {
-        name: output.to_string(),
-        r#type: Some(TypeProto {
-            denotation: "".to_string(),
-            value: Some(Value::TensorType(Tensor {
-                elem_type: 1,
-                shape: Some(TensorShapeProto {
-                    dim: vec![Dimension::from(1)],
-                }),
-            })),
-        }),
-        doc_string: "".to_string(),
-    };
-    let operation = NodeProto {
-        input: vec![left.name(), right.name()],
-        output: vec![output.name()],
-        name: "".to_string(),
-        op_type: "SoftmaxCrossEntropyLoss".to_string(),
-        domain: "".to_string(),
-        attribute: vec![string_attr("reduction", "mean")],
-        doc_string: "".to_string(),
-    };
-    OperationSingleOutput {
-        operation,
-        output_description: output,
-    }
-}
-
-pub fn create_grad_op<T: TensorDescriptor>(
-    input: T,
-    deriv_wrt: T,
-    deriv_name: &str,
-) -> OperationSingleOutput {
-    let dims: Vec<Dimension> = input.shape().iter().map(|&e| e.into()).collect();
-    let output = ValueInfoProto {
-        name: deriv_name.to_string(),
-        r#type: Some(TypeProto {
-            denotation: "".to_string(),
-            value: Some(Value::TensorType(Tensor {
-                elem_type: 1,
-                shape: Some(TensorShapeProto { dim: dims }),
-            })),
-        }),
-        doc_string: "".to_string(),
-    };
-    let operation = NodeProto {
-        input: vec![input.name()],
-        output: vec![output.name()],
-        name: "".to_string(),
-        op_type: "Gradient".to_string(),
-        domain: "ai.onnx.preview.training".to_string(),
-        attribute: vec![
-            string_vec_attr("xs", vec![&input.name()]),
-            string_vec_attr("y", vec![&deriv_wrt.name()]),
-        ],
-        doc_string: "".to_string(),
-    };
-    OperationSingleOutput {
-        operation,
-        output_description: output,
-    }
-}
-
-pub fn string_vec_attr(name: &str, val: Vec<&str>) -> AttributeProto {
-    AttributeProto {
-        name: name.to_string(),
-        ref_attr_name: "".to_string(),
-        doc_string: "".to_string(),
-        r#type: 8,
-        f: 0.0,
-        i: 0,
-        s: vec![],
-        t: None,
-        g: None,
-        sparse_tensor: None,
-        floats: vec![],
-        ints: vec![],
-        strings: val.iter().map(|s| s.to_string().into_bytes()).collect(),
-        tensors: vec![],
-        graphs: vec![],
-        sparse_tensors: vec![],
-    }
-}
-
-pub fn string_attr(name: &str, val: &str) -> AttributeProto {
-    AttributeProto {
-        name: name.to_string(),
-        ref_attr_name: "".to_string(),
-        doc_string: "".to_string(),
-        r#type: 3,
-        f: 0.0,
-        i: 0,
-        s: val.to_string().into_bytes(),
-        t: None,
-        g: None,
-        sparse_tensor: None,
-        floats: vec![],
-        ints: vec![],
-        strings: vec![],
-        tensors: vec![],
-        graphs: vec![],
-        sparse_tensors: vec![],
-    }
-}
-
-pub fn int_attr(name: &str, val: i64) -> AttributeProto {
-    AttributeProto {
-        name: name.to_string(),
-        ref_attr_name: "".to_string(),
-        doc_string: "".to_string(),
-        r#type: 2,
-        f: 0.0,
-        i: val,
-        s: vec![],
-        t: None,
-        g: None,
-        sparse_tensor: None,
-        floats: vec![],
-        ints: vec![],
-        strings: vec![],
-        tensors: vec![],
-        graphs: vec![],
-        sparse_tensors: vec![],
-    }
-}
-
-pub fn int_vec_attr(name: &str, val: Vec<i64>) -> AttributeProto {
-    AttributeProto {
-        name: name.to_string(),
-        ref_attr_name: "".to_string(),
-        doc_string: "".to_string(),
-        r#type: 7,
-        f: 0.0,
-        i: 0,
-        s: vec![],
-        t: None,
-        g: None,
-        sparse_tensor: None,
-        floats: vec![],
-        ints: val,
-        strings: vec![],
-        tensors: vec![],
-        graphs: vec![],
-        sparse_tensors: vec![],
     }
 }

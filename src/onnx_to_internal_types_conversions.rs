@@ -221,3 +221,13 @@ impl From<&PlaceholderF32Tensor> for ValueInfoProto {
         }
     }
 }
+
+/// From ONNX Concrete to our Placeholder
+impl From<&TensorProto> for PlaceholderF32Tensor {
+    fn from(val: &TensorProto) -> Self {
+        PlaceholderF32Tensor {
+            name: val.name.clone(),
+            shape: val.dims.clone(),
+        }
+    }
+}
