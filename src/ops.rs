@@ -3,7 +3,7 @@ use crate::onnx_proto_structs::type_proto::{Tensor, Value};
 use crate::onnx_proto_structs::{
     AttributeProto, NodeProto, TensorShapeProto, TypeProto, ValueInfoProto,
 };
-use crate::{ModelBuilder, PlaceholderF32Tensor, PlaceholderI32Tensor, TensorDescriptor};
+use crate::{ModelBuilder, PlaceholderF32Tensor, PlaceholderI32Tensor};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
@@ -51,8 +51,8 @@ impl ModelBuilder {
         left: &PlaceholderF32Tensor,
         right: &PlaceholderF32Tensor,
     ) -> PlaceholderF32Tensor {
-        /// [2x3] [3x5]
-        /// Get last 2 dim of left and right
+        // [2x3] [3x5]
+        // Get last 2 dim of left and right
         let last_two_dim_left = &left.shape.as_slice()[left.shape.len() - 2..];
         let last_two_dim_right = &right.shape.as_slice()[right.shape.len() - 2..];
         // assert_eq!(
@@ -87,7 +87,7 @@ impl ModelBuilder {
         tensor: &PlaceholderF32Tensor,
         labels: &PlaceholderI32Tensor,
     ) -> PlaceholderF32Tensor {
-        /// TODO
+        // TODO
         // assert_eq!(
         //     tensor.shape, labels.shape,
         //     "Shapes don't match for cross_entropy: left: {:?} right: {:?}",
@@ -104,78 +104,75 @@ impl ModelBuilder {
             shape: vec![],
         }
     }
-}
 
-pub struct OperationSingleOutput {
-    operation: NodeProto,
-    output_description: ValueInfoProto,
-}
-
-pub fn create_cross_entropy_op<T: TensorDescriptor>(
-    left: T,
-    right: T,
-    output: &str,
-) -> OperationSingleOutput {
-    let output = ValueInfoProto {
-        name: output.to_string(),
-        r#type: Some(TypeProto {
-            denotation: "".to_string(),
-            value: Some(Value::TensorType(Tensor {
-                elem_type: 1,
-                shape: Some(TensorShapeProto {
-                    dim: vec![Dimension::from(1)],
-                }),
-            })),
-        }),
-        doc_string: "".to_string(),
-    };
-    let operation = NodeProto {
-        input: vec![left.name(), right.name()],
-        output: vec![output.name()],
-        name: "".to_string(),
-        op_type: "SoftmaxCrossEntropyLoss".to_string(),
-        domain: "".to_string(),
-        attribute: vec![string_attr("reduction", "mean")],
-        doc_string: "".to_string(),
-    };
-    OperationSingleOutput {
-        operation,
-        output_description: output,
+    pub fn grad_in_train(
+        &mut self,
+        input: &PlaceholderF32Tensor,
+        deriv_wrt: &PlaceholderF32Tensor,
+    ) -> PlaceholderF32Tensor {
+        let dims: Vec<Dimension> = input.shape.iter().map(|&e| e.into()).collect();
+        let output = ValueInfoProto {
+            name: "random_str".to_string(),
+            r#type: Some(TypeProto {
+                denotation: "".to_string(),
+                value: Some(Value::TensorType(Tensor {
+                    elem_type: 1,
+                    shape: Some(TensorShapeProto { dim: dims }),
+                })),
+            }),
+            doc_string: "".to_string(),
+        };
+        let operation = NodeProto {
+            input: vec![input.name.clone()],
+            output: vec![output.name.clone()],
+            name: "".to_string(),
+            op_type: "Gradient".to_string(),
+            domain: "ai.onnx.preview.training".to_string(),
+            attribute: vec![
+                string_vec_attr("xs", vec![&input.name]),
+                string_vec_attr("y", vec![&deriv_wrt.name]),
+            ],
+            doc_string: "".to_string(),
+        };
+        self.model
+            .training_info
+            .first_mut()
+            .unwrap()
+            .algorithm
+            .as_mut()
+            .unwrap()
+            .node
+            .push(operation);
+        PlaceholderF32Tensor {
+            name: "random_str".to_string(),
+            shape: input.shape.clone(),
+        }
     }
-}
 
-pub fn create_grad_op<T: TensorDescriptor>(
-    input: T,
-    deriv_wrt: T,
-    deriv_name: &str,
-) -> OperationSingleOutput {
-    let dims: Vec<Dimension> = input.shape().iter().map(|&e| e.into()).collect();
-    let output = ValueInfoProto {
-        name: deriv_name.to_string(),
-        r#type: Some(TypeProto {
-            denotation: "".to_string(),
-            value: Some(Value::TensorType(Tensor {
-                elem_type: 1,
-                shape: Some(TensorShapeProto { dim: dims }),
-            })),
-        }),
-        doc_string: "".to_string(),
-    };
-    let operation = NodeProto {
-        input: vec![input.name()],
-        output: vec![output.name()],
-        name: "".to_string(),
-        op_type: "Gradient".to_string(),
-        domain: "ai.onnx.preview.training".to_string(),
-        attribute: vec![
-            string_vec_attr("xs", vec![&input.name()]),
-            string_vec_attr("y", vec![&deriv_wrt.name()]),
-        ],
-        doc_string: "".to_string(),
-    };
-    OperationSingleOutput {
-        operation,
-        output_description: output,
+    pub fn add_in_train(
+        &mut self,
+        left: &PlaceholderF32Tensor,
+        right: &PlaceholderF32Tensor,
+    ) -> PlaceholderF32Tensor {
+        assert_eq!(
+            left.shape, right.shape,
+            "Shapes don't match for add: left: {:?} right: {:?}",
+            left.shape, right.shape
+        );
+        let (op, output_name) = create_binary_op("Add", vec![&left.name, &right.name], vec![]);
+        self.model
+            .training_info
+            .first_mut()
+            .unwrap()
+            .algorithm
+            .as_mut()
+            .unwrap()
+            .node
+            .push(op);
+        PlaceholderF32Tensor {
+            name: output_name,
+            shape: left.shape.clone(),
+        }
     }
 }
 
@@ -221,6 +218,7 @@ pub fn string_attr(name: &str, val: &str) -> AttributeProto {
     }
 }
 
+#[allow(unused)]
 pub fn int_attr(name: &str, val: i64) -> AttributeProto {
     AttributeProto {
         name: name.to_string(),
@@ -242,6 +240,7 @@ pub fn int_attr(name: &str, val: i64) -> AttributeProto {
     }
 }
 
+#[allow(unused)]
 pub fn int_vec_attr(name: &str, val: Vec<i64>) -> AttributeProto {
     AttributeProto {
         name: name.to_string(),

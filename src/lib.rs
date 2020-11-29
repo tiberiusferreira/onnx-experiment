@@ -1,13 +1,11 @@
 mod onnx_proto_structs;
-use crate::onnx_proto_structs::tensor_shape_proto::Dimension;
-use crate::onnx_proto_structs::type_proto::{Tensor, Value};
+use crate::onnx_proto_structs::type_proto::Value;
 use onnx_proto_structs::*;
 mod onnx_runner;
 mod ops;
-use crate::onnx_runner::OnnxRunner;
+use crate::onnx_runner::{OnnxRunner, TrainingOutput};
 use serde::{Deserialize, Serialize};
 mod onnx_to_internal_types_conversions;
-use crate::ops::OperationSingleOutput;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
@@ -168,7 +166,22 @@ impl ModelBuilder {
                 doc_string: "".to_string(),
                 graph: Some(graph),
                 metadata_props: vec![],
-                training_info: vec![],
+                training_info: vec![TrainingInfoProto {
+                    initialization: None,
+                    algorithm: Some(GraphProto {
+                        node: vec![],
+                        name: "".to_string(),
+                        initializer: vec![],
+                        sparse_initializer: vec![],
+                        doc_string: "".to_string(),
+                        input: vec![],
+                        output: vec![],
+                        value_info: vec![],
+                        quantization_annotation: vec![],
+                    }),
+                    initialization_binding: vec![],
+                    update_binding: vec![],
+                }],
             },
             model_inputs: TensorCollection {
                 f32_tensors: vec![],
@@ -216,7 +229,7 @@ impl ModelBuilder {
         network_outputs.f32_tensors.pop().unwrap()
     }
 
-    pub fn get_train_loss(&mut self, placeholder: &PlaceholderF32Tensor) -> f32 {
+    pub fn train_get_loss(&mut self, placeholder: &PlaceholderF32Tensor) -> f32 {
         let output = ValueInfoProto::from(placeholder.clone());
         assert_eq!(self.graph().output.len(), 0);
         assert_eq!(
@@ -225,11 +238,22 @@ impl ModelBuilder {
             "Can only get train loss from scalar tensor"
         );
         self.graph_mut().output.push(output);
-        let loss = onnx_runner::PythonOnnxRunner::train(&self.model, &self.model_inputs);
+        let training_output = onnx_runner::PythonOnnxRunner::train(&self.model, &self.model_inputs);
+        let loss = training_output.loss;
+        self.update_initializers(training_output);
         self.graph_mut().output.clear();
         loss
     }
 
+    pub fn update_initializers(&mut self, training_output: TrainingOutput) {
+        for initializer in &mut self.graph_mut().initializer {
+            let new_val = training_output
+                .updated_initializers
+                .get(&initializer.name)
+                .expect("Couldn't get new value for initializer");
+            initializer.float_data = new_val.clone();
+        }
+    }
     pub fn add_i32_input(&mut self, input: I32Tensor) -> PlaceholderI32Tensor {
         self.model_inputs.i32_tensors.push(input.clone());
         let place_holder = onnx_proto_structs::ValueInfoProto::from(input);
@@ -244,5 +268,29 @@ impl ModelBuilder {
 
     pub fn add_output(&mut self, node: ValueInfoProto) {
         self.graph_mut().output.push(node);
+    }
+
+    pub fn add_assignment(&mut self, origin: &PlaceholderF32Tensor, dest: &PlaceholderF32Tensor) {
+        self.model
+            .training_info
+            .first_mut()
+            .unwrap()
+            .update_binding
+            .push(StringStringEntryProto {
+                key: origin.name.clone(),
+                value: dest.name.clone(),
+            });
+    }
+
+    pub fn train_set_output(&mut self, placeholder: &PlaceholderF32Tensor) {
+        self.model
+            .training_info
+            .first_mut()
+            .unwrap()
+            .algorithm
+            .as_mut()
+            .unwrap()
+            .output
+            .push(ValueInfoProto::from(placeholder));
     }
 }

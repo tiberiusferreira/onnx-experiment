@@ -5,8 +5,8 @@ import json
 import onnx
 import argparse
 
-from onnxruntime.training import ORTTrainer, ORTTrainerOptions, optim
-from onnxruntime.training.optim import SGDConfig, AdamConfig
+from onnxruntime.training import ORTTrainer, ORTTrainerOptions
+from onnxruntime.training.optim import SGDConfig
 
 parser = argparse.ArgumentParser(description='ONNX runner parameters')
 parser.add_argument('--model-file', metavar='model_file', type=str, nargs=1, required=True,
@@ -68,26 +68,37 @@ model_desc = {
 
 options = {'device': {'id': 'cpu'}}
 
+
 trainer = ORTTrainer(model,
                      model_desc,
-                     optim_config=SGDConfig(),
+                     optim_config=SGDConfig(lr=0.1),
+                     loss_fn=None,
                      options=ORTTrainerOptions(options))
+
 
 loss = trainer.train_step(inputs_values)
 
-outputs_as_tensors = {
-    "f32_tensors": [],
-    "i32_tensors": []
+
+with open('trained.onnx.txt', 'w') as f:
+    f.write(str(model))
+
+
+trainer = ORTTrainer(model,
+                     model_desc,
+                     optim_config=SGDConfig(lr=0.01),
+                     options=ORTTrainerOptions(options))
+loss = trainer.train_step(inputs_values)
+
+updated_initializers = trainer._training_session.get_state()
+
+for val in trainer._training_session.get_state():
+    # sys.stderr.write(str(type(updated_initializers[val].flatten())))
+    updated_initializers[val] = updated_initializers[val].flatten().tolist()
+
+training_output = {
+    'loss': loss.numpy().flatten().tolist()[0],  # get loss as a number
+    'updated_initializers': updated_initializers  #
 }
 
-if loss.dtype == torch.float32:
-    output_as_tensor = {
-        "name": "loss",
-        "data": loss.numpy().flatten().tolist(),
-        "shape": list(loss.shape)
-    }
-    outputs_as_tensors['f32_tensors'].append(output_as_tensor)
-else:
-    sys.stderr.write("Loss was not float! Was: " + str(loss.dtype))
+sys.stdout.write(json.dumps(training_output))
 
-sys.stdout.write(str(loss.numpy().flatten().tolist()[0]))

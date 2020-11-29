@@ -1,12 +1,19 @@
 use crate::onnx_proto_structs::ModelProto;
 use crate::{onnx_proto_structs, TensorCollection};
 use prost::Message;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::Write;
-use std::num::ParseFloatError;
 
 pub struct PythonOnnxRunner {
     model: onnx_proto_structs::ModelProto,
     model_inputs: TensorCollection,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TrainingOutput {
+    pub loss: f32,
+    pub updated_initializers: HashMap<String, Vec<f32>>,
 }
 
 pub trait OnnxRunner {
@@ -14,7 +21,10 @@ pub trait OnnxRunner {
         model: &onnx_proto_structs::ModelProto,
         external_inputs: &TensorCollection,
     ) -> TensorCollection;
-    fn train(model: &onnx_proto_structs::ModelProto, external_inputs: &TensorCollection) -> f32;
+    fn train(
+        model: &onnx_proto_structs::ModelProto,
+        external_inputs: &TensorCollection,
+    ) -> TrainingOutput;
 }
 
 impl OnnxRunner for PythonOnnxRunner {
@@ -56,7 +66,7 @@ impl OnnxRunner for PythonOnnxRunner {
         }
     }
 
-    fn train(model: &ModelProto, external_inputs: &TensorCollection) -> f32 {
+    fn train(model: &ModelProto, external_inputs: &TensorCollection) -> TrainingOutput {
         let runner = Self::new(model, external_inputs);
 
         let model_name = "my_model.onnx";
@@ -85,9 +95,11 @@ impl OnnxRunner for PythonOnnxRunner {
             panic!("Error running model");
         }
         let output_as_string = String::from_utf8_lossy(&output.stdout);
-        match output_as_string.parse::<f32>() {
+        let training_output: Result<TrainingOutput, _> =
+            serde_json::from_str(output_as_string.as_ref());
+        match training_output {
             Ok(loss) => loss,
-            Err(e) => {
+            Err(_e) => {
                 panic!("Loss was not f32, was: {}", output_as_string);
             }
         }

@@ -1,0 +1,108 @@
+ir_version: 7
+producer_name: "rust"
+producer_version: "0.1.0"
+graph {
+  node {
+    input: "yHPib0l1Ev"
+    input: "3yrYGLmoQH"
+    output: "BngnYGhnTB"
+    name: "Add_0"
+    op_type: "Add"
+  }
+  node {
+    input: "BngnYGhnTB"
+    input: "beSAI6ivEB"
+    output: "qfsj7Bx7Ib"
+    name: "MatMul_1"
+    op_type: "MatMul"
+  }
+  node {
+    input: "qfsj7Bx7Ib"
+    input: "MPoptWz5GB"
+    output: "lMQxpHOnP1"
+    name: "SoftmaxCrossEntropyLoss_2"
+    op_type: "SoftmaxCrossEntropyLoss"
+    attribute {
+      name: "reduction"
+      s: "mean"
+      type: STRING
+    }
+  }
+  name: "rust-graph"
+  initializer {
+    dims: 2
+    dims: 2
+    data_type: 1
+    float_data: 1.7197894
+    float_data: 2.4002106
+    float_data: 3.1965067
+    float_data: 3.4034936
+    name: "beSAI6ivEB"
+  }
+  input {
+    name: "yHPib0l1Ev"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+          dim {
+            dim_value: 2
+          }
+          dim {
+            dim_value: 2
+          }
+        }
+      }
+    }
+  }
+  input {
+    name: "3yrYGLmoQH"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+          dim {
+            dim_value: 2
+          }
+          dim {
+            dim_value: 2
+          }
+        }
+      }
+    }
+  }
+  input {
+    name: "MPoptWz5GB"
+    type {
+      tensor_type {
+        elem_type: 6
+        shape {
+          dim {
+            dim_value: 2
+          }
+        }
+      }
+    }
+  }
+  output {
+    name: "lMQxpHOnP1"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+        }
+      }
+    }
+  }
+}
+opset_import {
+  version: 12
+}
+opset_import {
+  domain: "ai.onnx.preview.training"
+  version: 1
+}
+training_info {
+  algorithm {
+  }
+}
