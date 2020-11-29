@@ -27,6 +27,26 @@ fn create_binary_op(
     )
 }
 
+fn create_unary_op(
+    onnx_op_type_name: &str,
+    input: &str,
+    attributes: Vec<AttributeProto>,
+) -> (NodeProto, String) {
+    let rand_string: String = thread_rng().sample_iter(&Alphanumeric).take(10).collect();
+    (
+        NodeProto {
+            input: vec![input.to_string()],
+            output: vec![rand_string.clone()],
+            name: "".to_string(),
+            op_type: onnx_op_type_name.to_string(),
+            domain: "".to_string(),
+            attribute: attributes,
+            doc_string: "".to_string(),
+        },
+        rand_string,
+    )
+}
+
 impl ModelBuilder {
     pub fn add(
         &mut self,
@@ -46,25 +66,31 @@ impl ModelBuilder {
         }
     }
 
+    pub fn sigmoid(&mut self, input: &PlaceholderF32Tensor) -> PlaceholderF32Tensor {
+        let (op, output_name) = create_unary_op("Sigmoid", &input.name, vec![]);
+        self.graph_mut().node.push(op);
+        PlaceholderF32Tensor {
+            name: output_name,
+            shape: input.shape.clone(),
+        }
+    }
+
     pub fn matmul(
         &mut self,
         left: &PlaceholderF32Tensor,
         right: &PlaceholderF32Tensor,
     ) -> PlaceholderF32Tensor {
-        // [2x3] [3x5]
+        // Lets keep things simple for now, for now we only accept
+        // [NxAxB] x [BxC] = [NxAxC]
+        let error = format!(
+            "Cant multiply shapes: {:?} and {:?}",
+            left.shape, right.shape
+        );
+        assert!(left.shape.len() == 3 || left.shape.len() == 2, "{}", &error);
+        assert_eq!(right.shape.len(), 2, "{}", &error);
         // Get last 2 dim of left and right
         let last_two_dim_left = &left.shape.as_slice()[left.shape.len() - 2..];
         let last_two_dim_right = &right.shape.as_slice()[right.shape.len() - 2..];
-        // assert_eq!(
-        //     last_two_dim_left, 2,
-        //     "Matmul input Tensor had less than two dimensions: {}",
-        //     left.shape
-        // );
-        // assert_eq!(
-        //     last_two_dim_right, 2,
-        //     "Matmul input Tensor had less than two dimensions: {}",
-        //     right.shape
-        // );
         assert_eq!(
             last_two_dim_left[1], last_two_dim_right[0],
             "Shapes don't match for matmul: left: {:?} right: {:?}",
@@ -84,18 +110,19 @@ impl ModelBuilder {
 
     pub fn cross_entropy(
         &mut self,
-        tensor: &PlaceholderF32Tensor,
-        labels: &PlaceholderI32Tensor,
+        input: &PlaceholderF32Tensor,
+        target: &PlaceholderI32Tensor,
     ) -> PlaceholderF32Tensor {
-        // TODO
-        // assert_eq!(
-        //     tensor.shape, labels.shape,
-        //     "Shapes don't match for cross_entropy: left: {:?} right: {:?}",
-        //     tensor.shape, labels.shape
-        // );
+        assert!(
+            input.shape.len() == 2 && target.shape.len() == 1 && input.shape[0] == target.shape[0],
+            "Shapes don't match for cross_entropy: Input tensor needs to be of rank 2 and shape \
+            [N, C] and Target of shape [N], was: Input: {:?} Target: {:?}",
+            input.shape,
+            target.shape
+        );
         let (op, output_name) = create_binary_op(
             "SoftmaxCrossEntropyLoss",
-            vec![&tensor.name, &labels.name],
+            vec![&input.name, &target.name],
             vec![string_attr("reduction", "mean")],
         );
         self.graph_mut().node.push(op);

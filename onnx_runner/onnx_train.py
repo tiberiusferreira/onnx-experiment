@@ -1,5 +1,7 @@
 # source /Users/tiberio/Documents/github/onnxruntime/venv/bin/activate
 import sys
+import time
+
 import torch
 import json
 import onnx
@@ -7,6 +9,8 @@ import argparse
 
 from onnxruntime.training import ORTTrainer, ORTTrainerOptions
 from onnxruntime.training.optim import SGDConfig
+
+
 
 parser = argparse.ArgumentParser(description='ONNX runner parameters')
 parser.add_argument('--model-file', metavar='model_file', type=str, nargs=1, required=True,
@@ -75,8 +79,10 @@ trainer = ORTTrainer(model,
                      loss_fn=None,
                      options=ORTTrainerOptions(options))
 
-
+start = time.time()
 loss = trainer.train_step(inputs_values)
+end = time.time()
+
 
 updated_initializers = trainer._training_session.get_state()
 
@@ -90,3 +96,4 @@ training_output = {
 
 sys.stdout.write(json.dumps(training_output))
 
+print('Time =' + str(end - start))

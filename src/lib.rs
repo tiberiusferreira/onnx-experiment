@@ -68,6 +68,7 @@ impl I32Tensor {
 
 /// Placeholder Tensors are tensors representations inside a ONNX graph, they don't hold any actual
 /// data  
+#[derive(Debug, Clone)]
 pub struct PlaceholderF32Tensor {
     pub name: String,
     pub shape: Vec<i64>,
@@ -219,7 +220,7 @@ impl ModelBuilder {
     }
 
     pub fn get_val_of_f32(&mut self, placeholder: &PlaceholderF32Tensor) -> F32Tensor {
-        let output = ValueInfoProto::from(placeholder.clone());
+        let output = ValueInfoProto::from(placeholder);
         assert_eq!(self.graph().output.len(), 0);
         self.graph_mut().output.push(output);
         let mut network_outputs =
@@ -230,7 +231,7 @@ impl ModelBuilder {
     }
 
     pub fn train_get_loss(&mut self, placeholder: &PlaceholderF32Tensor) -> f32 {
-        let output = ValueInfoProto::from(placeholder.clone());
+        let output = ValueInfoProto::from(placeholder);
         assert_eq!(self.graph().output.len(), 0);
         assert_eq!(
             placeholder.shape.len(),
@@ -270,27 +271,27 @@ impl ModelBuilder {
         self.graph_mut().output.push(node);
     }
 
-    pub fn add_assignment(&mut self, origin: &PlaceholderF32Tensor, dest: &PlaceholderF32Tensor) {
-        self.model
-            .training_info
-            .first_mut()
-            .unwrap()
-            .update_binding
-            .push(StringStringEntryProto {
-                key: origin.name.clone(),
-                value: dest.name.clone(),
-            });
-    }
-
-    pub fn train_set_output(&mut self, placeholder: &PlaceholderF32Tensor) {
-        self.model
-            .training_info
-            .first_mut()
-            .unwrap()
-            .algorithm
-            .as_mut()
-            .unwrap()
-            .output
-            .push(ValueInfoProto::from(placeholder));
-    }
+    // pub fn add_assignment(&mut self, origin: &PlaceholderF32Tensor, dest: &PlaceholderF32Tensor) {
+    //     self.model
+    //         .training_info
+    //         .first_mut()
+    //         .unwrap()
+    //         .update_binding
+    //         .push(StringStringEntryProto {
+    //             key: origin.name.clone(),
+    //             value: dest.name.clone(),
+    //         });
+    // }
+    //
+    // pub fn train_set_output(&mut self, placeholder: &PlaceholderF32Tensor) {
+    //     self.model
+    //         .training_info
+    //         .first_mut()
+    //         .unwrap()
+    //         .algorithm
+    //         .as_mut()
+    //         .unwrap()
+    //         .output
+    //         .push(ValueInfoProto::from(placeholder));
+    // }
 }
