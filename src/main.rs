@@ -12,9 +12,10 @@ fn main() {
     let matmul_res = model.matmul(&add_res, &weights);
     let loss = model.cross_entropy(&matmul_res, &label);
 
-    for _i in 0..50 {
+    for _i in 0..2 {
         let w = model.train_get_loss(&loss);
         println!("{:?}", w);
+        println!("{:?}", model.get_val_of_f32(&a));
     }
 
     // let output = model.add_operation(re);

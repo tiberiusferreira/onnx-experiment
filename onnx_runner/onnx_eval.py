@@ -40,13 +40,11 @@ for single_input in data_inputs['i32_tensors']:
     value = torch.tensor(single_input['data'], dtype=torch.int32).reshape(single_input['shape'])
     eval_inputs[single_input['name']] = value.numpy() # single_input['data']
     inputs_values.append(value)
-
 sess = onnxruntime.InferenceSession(model_file_path)
 
 names = []
 for out in sess.get_outputs():
     names.append(out.name)
-
 output = sess.run(names, input_feed=eval_inputs)
 
 outputs_as_tensors = {

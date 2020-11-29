@@ -20,6 +20,7 @@ args = parser.parse_args()
 model_file_path = args.model_file[0]
 model_inputs_file = args.inputs_file[0]
 output_file_path = None
+
 if args.output_file:
     output_file_path = args.output_file[0]
 
@@ -68,36 +69,23 @@ model_desc = {
 
 options = {'device': {'id': 'cpu'}}
 
-
 trainer = ORTTrainer(model,
                      model_desc,
-                     optim_config=SGDConfig(lr=0.1),
+                     optim_config=SGDConfig(lr=0.01),
                      loss_fn=None,
                      options=ORTTrainerOptions(options))
 
 
 loss = trainer.train_step(inputs_values)
 
-
-with open('trained.onnx.txt', 'w') as f:
-    f.write(str(model))
-
-
-trainer = ORTTrainer(model,
-                     model_desc,
-                     optim_config=SGDConfig(lr=0.01),
-                     options=ORTTrainerOptions(options))
-loss = trainer.train_step(inputs_values)
-
 updated_initializers = trainer._training_session.get_state()
 
 for val in trainer._training_session.get_state():
-    # sys.stderr.write(str(type(updated_initializers[val].flatten())))
     updated_initializers[val] = updated_initializers[val].flatten().tolist()
 
 training_output = {
     'loss': loss.numpy().flatten().tolist()[0],  # get loss as a number
-    'updated_initializers': updated_initializers  #
+    'updated_initializers': updated_initializers  # the updated initializers as {'name': [0., 0.231 ...]}
 }
 
 sys.stdout.write(json.dumps(training_output))
