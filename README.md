@@ -25,4 +25,11 @@ This allows us to decouple the Neural Network building API from the executing ru
 
 There is a quite good ONNX runner in Rust already, by Sonos: [https://github.com/sonos/tract](https://github.com/sonos/tract "https://github.com/sonos/tract") but it does not support training yet and is CPU only.
 
-The best ONNX runtime with training support I could find so far was https://github.com/microsoft/onnxruntime but even this one does not support [Gradient operators yet](https://github.com/microsoft/onnxruntime/discussions/5892) or [training standard ONNX models, focusing on Pytorch ones](https://github.com/microsoft/onnxruntime/discussions/5969). 
+The best ONNX runtime with training support I could find so far was https://github.com/microsoft/onnxruntime but even this one does not support [Gradient operators yet](https://github.com/microsoft/onnxruntime/discussions/5892) or [training standard ONNX models, focusing on Pytorch ones](https://github.com/microsoft/onnxruntime/discussions/5969) and requires compiling from source at time of writing.  
+
+Due to this limitations, this PoC repo is... rough to say the least:
+-   The ONNX representation is written to a file along with it's inputs 
+-   A Python script is called from Rust which runs the ONNX and outputs (to stdout) the loss and updated weights.
+-   The ONNX model in Rust is updated with the new weights  
+
+The Python imports alone take around ~1s to load, which make it super slow.  
